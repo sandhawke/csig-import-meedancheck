@@ -16,11 +16,11 @@ $ npx meedancheck-to-rdf sample/tiny.csv > out.nq
 
 ## Our Input (the Meedan-Check format)
 
-Very **wide** CSV files.  One row per session per use.  Each signal obtained from the user is recorded in a set of adjacent columns.
+Very **wide** CSV files.  One row per item considered per user.  Each signal obtained from the user about that item is recorded in a set of five adjacent columns (task_question_N, task_user_N, task_date_N, task_answer_N, task_note_N), so for 20 signals we'll have 100 "task" columns, plus some general stuff for the row.
 
 Examples:
-* <https://data.world/credibilitycoalition/basic-november2018>
-* <https://data.world/credibilitycoalition/webconf-2018/> (the CSVs)
+* <https://data.world/credibilitycoalition/basic-november2018> (one xlsx file with 8 sheets)
+* <https://data.world/credibilitycoalition/webconf-2018/> (three csv files)
 
 The multi-sheet xlsx files (like nov2018) can be converted to csv like this:
 
@@ -74,7 +74,7 @@ between the two, and we can do the conversion.
 
 #### Schema Variation 1: `?reading` is always xsd:true
 
-```turtle
+```
 ?signal mov:propdef "Question: ${question}\nAnswer: ${answer}"
 ```
 
@@ -88,7 +88,7 @@ Con:
 
 #### Schema Variation 2: `?reading` is index into list of possible answers
 
-```turtle
+```
 ?signal mov:propdef `Question: ${question}
 ---
 Value 1 for answer: ${opt1}
@@ -106,7 +106,7 @@ Con:
 
 #### Schema Variation 3: `?reading` is resource which represents one of the possible answers
 
-```turtle
+```
 ?signal mov:propdef "Question: ${question}"
 ?reading mov:itemdef "${answer}"
 ```
