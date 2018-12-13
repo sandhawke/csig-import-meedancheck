@@ -1,0 +1,31 @@
+{
+  "name": "meedancheck-to-rdf",
+  "version": "0.0.0",
+  "description": "Convert the CSV output from Meedan's 'check' software to RDF",
+  "main": "index.js",
+  "scripts": {
+    "test": "npx standard && npx tap --cov test*.js test/*.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/sandhawke/meedancheck-to-rdf.git"
+  },
+  "keywords": [
+    "archiving-map"
+  ],
+  "author": "Sandro Hawke (http://hawke.org/sandro)",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/sandhawke/meedancheck-to-rdf/issues"
+  },
+  "homepage": "https://github.com/sandhawke/meedancheck-to-rdf#readme",
+  "devDependencies": {
+    "tape": "^4.9.1"
+  },
+  "dependencies": {
+    "csv-parse": "^4.1.0",
+    "debug": "^4.1.0",
+    "meow": "^5.0.0",
+    "moment": "^2.22.2"
+  }
+}
