@@ -49,7 +49,7 @@ _:observation { ?item ?signal ?reading }
 
 ### Output Shape 2 (Using Custom Reification)
 
-```turtle
+```
 _:observation
    cred:observerProfile ?observerProfileURL;
    dc:date ?timeStamp;
