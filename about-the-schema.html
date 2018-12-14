@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html>
+  <head>
+<style type="text/css">
+  table { border-collapse: collapse; } 
+  td, th { border: 1px solid #aaaaaa; padding: 0.5em;  } 
+  td p { margin: 0 }
+  </style>
+    <meta charset='utf-8'>
+    <title>Mapping Credibility Signal Questionnaire Data to RDF</title>
+    <script 
+     src='https://www.w3.org/Tools/respec/respec-w3c-common' 
+     class='remove'></script>
+    <script class='remove'>
+      var respecConfig = {
+        specStatus: "base",
+        editors: [{
+          name: "Sandro Hawke",
+          url: "https://hawke.org/sandro",
+        }],
+      // edDraftURI: "http://sandhawke.github.com/",
+        format: "markdown"
+      };
+    </script>
+  </head>
+  <body>
+    <section id='abstract'>
+      <p>
+        TBD
+      </p>
+    </section>
+    <section id='sotd'>
+      <p>
+        TBD
+      </p>
+    </section>
+# Mapping Check-Style Questionnaire Data to RDF
+
+There are several design questions to consider:
+
+## Responses as RDF statements
+
+Do we treat data expressing how a fixed question was answered about a given subject as essentially an RDF statement?  The triple { given subject, question, answer } seems very triple-like.  The rest of these issues assume, Yes, we're treating the answering of a question as an RDF statement.
+
+If we said No, then things would be simpler at this point, but more conversion steps would be needed later on during data integration and processing.
+
+This discarded option might look like:
+
+<pre class="example">
+:resp6321 cred:question "Is the language of the headline extremely negative, extremely positive, or somewhere in the middle?";
+          cred:answer "Neither negative nor positive".
+</pre>
+
+## Encoding as Predicates and Objects
+
+### Conveying the list of allowed answers
+
+Do we need to record what the possible answers were for multiple choice questions, or can we just express what the answer was?  For example, if user 1 is asked "Which is your favorite flavor ice cream: vanilla, chocolate, or strawberry" and user 2 is asked "Which is your favorite flavor ice cream: vanilla, chocolate, strawberry, or mint?", and they both answer "vanilla", will the data for both users be the same?
+
+Certainly conveying the allowed answers is more scientifically accurate, but it makes things seem rather more complicated.
+
+In shorthand below, we refer to conveying the list of allowed answers as "**all**" or "**a**" (*all* the possible answers are encoded), and the opposite as "**one**" or "**o**" (only *one* of the possible answers is encoded).
+
+### Division between Predicate and Object
+
+While { given subject, question, answer } looks simple, questions are not exactly predicates, so perhaps the response should map to an RDF statement in a different way.  Some options are:
+
+Option **tf**: true/false.  The question and answer text are both encoded in the predicate, and the object is xsd:true when this answer was given to this question.
+
+Option **ag**: agreement level. The predicate encodes a propositional statement and the object encodes a level of agreement the user has with that statement. This works nicely for some questions, and may fit into other uncertainty-reasoning systems. There is a question whether the answers are merely ordinal (ordered values) or can be calibrated as [interval or ratio](https://www.mymarketresearchmethods.com/types-of-data-nominal-ordinal-interval-ratio/) readings.
+
+Option **mc**: multiple choice.  Treat the question as a predicate and the answer as the value. The triple's object would be a named node connected to definition text, and also a sortable literal for ordinal answers and a numeric answer for interval/ratio answers.
+
+### Experimental Representation
+
+Combining these three options with the two from the previous issue, we get six variants, which code like this:
+
+|                     | a: all possible answers encoded | o: only the actually-given answer encoded |
+|---------------------|---------------------------------|-------------------------------------------|
+| tf: true/false      | tfa                             | tfo                                       |
+| ag: agreement       | aga                             | ago                                       |
+| mc: multiple choice | mca                             | mco                                       |
+
+
+So the predicate for the signal "Clickbaity" would have variants :tfaClickbaity, :tfoClickbaity, etc.
+
+The tf and mc versions can be machine generated, while an ag one requires human configuration
+
+Also the data needed for the "a" versions requires human configuration, because the instance data might not have all the possible answers and doesn't say the order in which they were presented.
+
+Human configuration is also needed to map to signal names (and thus nice predicate names).
+
+My guess right now is aga and mco will be best, depending on the question.
+
+## Representing metadata
+
+How do we represent metadata about the triple, like who answered it and when?  On this questions, there are a set of answers that use a "named graph" approach, and a set that use a "reification" approach.
+
+For names graphs, we can do something like this:
+
+<pre class="example" title="Named Graphs version of one observation">
+:resp6321
+     cred:observerProfile ?observerProfileURL;
+     dc:date ?timeStamp.
+:resp6321 { ?item ?signal ?reading }
+</pre>
+
+Options: use the response id as the graph label, like above, or use two entities
+and connect them via a predicate?
+
+Some options for reification follow.
+
+Custom vocab:
+
+<pre class="example" title="">
+:resp6321
+   cred:observerProfile ?observerProfileURL;
+   dc:date ?timeStamp;
+   cred:item ?item;
+   cred:signal ?signal;
+   cred:reading ?reading.
+</pre>
+
+Using RDF reification vocab directly:
+
+<pre class="example" title="">
+:resp6321
+   cred:observerProfile ?observerProfileURL;
+   dc:date ?timeStamp;
+   rdf:subject ?item;
+   rdf:predicate ?signal;
+   rdf:object ?reading.
+</pre>
+
+Using RDF reification vocab indirectly:
+
+<pre class="example" title="">
+:resp6321
+   cred:observerProfile ?observerProfileURL;
+   dc:date ?timeStamp;
+   cred:statement [
+     rdf:subject ?item;
+     rdf:predicate ?signal;
+     rdf:object ?reading ].
+</pre>
+
+Or doing it wikidata-style:  (What is this called? Also they rely on namespace swapping instead of providing a metadataAccessVia link.)
+
+<pre class="example" title="">
+?signal
+   :metadataAccessVia ?signalMETA
+?item
+   ?signalMETA :resp6321
+:resp6321
+   ?signal ?reading.
+   cred:observerProfile ?observerProfileURL;
+   dc:date ?timeStamp;
+</pre>
