@@ -33,6 +33,8 @@ That will write basicnov2018.csv.0, basicnov2018.csv.1, etc.
 
 ## Our Output
 
+See [Mapping Credibility Signal Questionnaire Data to RDF](https://sandhawke.github.io/meedancheck-to-rdf/about-the-schema.html).
+
 ** NOTES -- NOT Exactly what's implemented right now **
 
 RDF, using one of two Credibility Signal data shapes.  Default
