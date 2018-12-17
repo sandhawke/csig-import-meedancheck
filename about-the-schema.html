@@ -77,7 +77,8 @@ Option **mc**: multiple choice.  Treat the question as a predicate and the answe
 
 ### Experimental Representation
 
-Combining these three options with the two from the previous issue, we get six variants, which we might arrange and label like this:
+Combining these three options with the two from the previous issue, we get six variants, which we give 3-letter codes:
+
 
 |                     | a: all possible answers encoded | o: only the actually-given answer encoded |
 |---------------------|---------------------------------|-------------------------------------------|
@@ -85,8 +86,7 @@ Combining these three options with the two from the previous issue, we get six v
 | ag: agreement       | aga                             | ago                                       |
 | mc: multiple choice | mca                             | mco                                       |
 
-
-So the predicate for the signal "Clickbaity" would have variants :tfaClickbaity, :tfoClickbaity, etc.
+Then, for experimentation, we can have multiple versions of each predicate.  Perhaps like this: for the signal "Clickbaity" the true/false+all-answers predicate would be :tfaClickbaity; others would be :tfoClickbaity, etc.  Or we could make it part of the namespace.
 
 The tf and mc versions can be machine generated, while an ag one requires human configuration
 
