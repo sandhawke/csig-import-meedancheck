@@ -41,22 +41,27 @@
 
 Do we treat data expressing how a fixed question was answered about a given subject as essentially an RDF statement?  The triple { given subject, question, answer } seems very triple-like.  The rest of these issues assume, Yes, we're treating the answering of a question as an RDF statement.
 
-If we said No, then things would be simpler at this point, but more conversion steps would be needed later on during data integration and processing.
+If we said No, then things would be simpler at this point, but more conversion steps would probably be needed later on during data integration and processing.
 
 This discarded option might look like:
 
 <pre class="example">
-:resp6321 cred:question "Is the language of the headline extremely negative, extremely positive, or somewhere in the middle?";
-          cred:answer "Neither negative nor positive".
+:resp6321
+    cred:question "Is the language of the headline extremely negative, extremely positive, or somewhere in the middle?";
+    cred:answer "Neither negative nor positive".
+    cred:observerProfile <https://example.org/user31>;
+    dc:date "2018-12-17T15:44:24-05:00Z"^^xsd:dateTimeStamp
 </pre>
 
 ## Encoding as Predicates and Objects
+
+Assuming we use an RDF or RDF-like encoding, with predicates identified by IRIs, we still have a few big design decisions.
 
 ### Conveying the list of allowed answers
 
 Do we need to record what the possible answers were for multiple choice questions, or can we just express what the answer was?  For example, if user 1 is asked "Which is your favorite flavor ice cream: vanilla, chocolate, or strawberry" and user 2 is asked "Which is your favorite flavor ice cream: vanilla, chocolate, strawberry, or mint?", and they both answer "vanilla", will the data for both users be the same?
 
-Certainly conveying the allowed answers is more scientifically accurate, but it makes things seem rather more complicated.
+Conveying the allowed answers is more scientifically accurate, but it makes things seem rather more complicated.
 
 In shorthand below, we refer to conveying the list of allowed answers as "**all**" or "**a**" (*all* the possible answers are encoded), and the opposite as "**one**" or "**o**" (only *one* of the possible answers is encoded).
 
@@ -72,7 +77,7 @@ Option **mc**: multiple choice.  Treat the question as a predicate and the answe
 
 ### Experimental Representation
 
-Combining these three options with the two from the previous issue, we get six variants, which code like this:
+Combining these three options with the two from the previous issue, we get six variants, which we might arrange and label like this:
 
 |                     | a: all possible answers encoded | o: only the actually-given answer encoded |
 |---------------------|---------------------------------|-------------------------------------------|
@@ -93,19 +98,40 @@ My guess right now is aga and mco will be best, depending on the question.
 
 ## Representing metadata
 
-How do we represent metadata about the triple, like who answered it and when?  On this questions, there are a set of answers that use a "named graph" approach, and a set that use a "reification" approach.
+How do we represent metadata about the triple, like who answered it and when?  On this question, there are a set of answers that use a "named graph" approach, and a set that use a "reification" approach.
+
+### Named Graph designs
 
 For names graphs, we can do something like this:
 
-<pre class="example" title="Named Graphs version of one observation">
+<pre class="example" title="Named Graphs, one observation, response is graph">
 :resp6321
-     cred:observerProfile ?observerProfileURL;
-     dc:date ?timeStamp.
+   cred:observerProfile ?observerProfileURL;
+   dc:date ?timeStamp.
 :resp6321 { ?item ?signal ?reading }
 </pre>
 
-Options: use the response id as the graph label, like above, or use two entities
-and connect them via a predicate?
+Or we can separate the graph label from the response, like this
+
+<pre class="example" title="Named Graphs, one observation, response link to graph">
+:resp6321
+   cred:observerProfile ?observerProfileURL;
+   dc:date ?timeStamp;
+   cred:inGraph _:g6321.    
+_:g6321 { ?item ?signal ?reading }
+</pre>
+
+If there are multiple responses with the same metadata (unlikely if the timestamp includes time-of-day), then the readings can be merged into one graph:
+
+<pre class="example" title="Named Graphs, multiple observations, response is graph">
+:gr1
+   cred:observerProfile ?observerProfileURL;
+   dc:date ?timeStamp;
+:gr1 { ?item ?signal1 ?reading1; ?signal2 ?reading2 }
+</pre>
+
+
+### Reification designs
 
 Some options for reification follow.
 

@@ -3,6 +3,8 @@
 
 Convert the CSV output from Meedan's 'check' software to RDF
 
+** IN PROGRESS **
+
 ## Usage
 
 Command line:
@@ -118,3 +120,18 @@ Con:
 
 [npm-image]: https://img.shields.io/npm/v/meedancheck-to-rdf.svg?style=flat-square
 [npm-url]: https://npmjs.org/package/meedancheck-to-rdf
+
+
+================================================================
+
+--style=tfo 
+
+--meta=namedgraphs / customrei / stdrei / wikidata
+
+--config=...
+     question => agreement predicates
+     question => answers
+     question => signal name
+
+spreadsheet?
+  signal name / as-a-question / as-an-agreement-statement / answers...
