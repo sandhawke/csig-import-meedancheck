@@ -5,8 +5,11 @@ const debug = require('debug')('cli')
 const read = require('./read-csv')
 const toRDF = require('./to-rdf')
 const {fetchCSV} = require('./remote')
+const {Converter} = require('.')
+require('completarr')()
 
 yargs
+  // .completion()   now handled by completarr
   .usage('$0 [options] [input_files...]')
   .example('$0 sample/basicnov2018.csv.1 -d > out.nq')
   .example('$0 sample/*csv* -g -o questions.csv')
@@ -17,16 +20,16 @@ yargs
     alias: 'o',
     describe: 'filename where generated data should go, suffix determines format'
   })
-  .option('customize', {
+  .option('qmeta', {
     string: true,
-    alias: 'c',
+    alias: 'q',
     default: 'https://docs.google.com/spreadsheets/d/1VBr5VXf5UYlQVN-V42QpxHo4kh-4EKNDLU7whuFksSw',
-    describe: 'URL of spreadsheet of customization data'
+    describe: 'URL of spreadsheet with question metadata'
   })
-  .option('generate-customize', {
+  .option('generate-qmeta', {
     boolean: true,
     alias: 'g',
-    describe: 'Output a CSV file as a starting point for a customization sheet'
+    describe: 'Output a CSV file as a new qmeta, based on everything we know'
   })
   .option('json', {
     describe: 'filename in which to save a copy of the intermediate JSON data, "" to skip',
@@ -47,56 +50,53 @@ yargs
 const argv = yargs.argv
 debug('argv = %O', argv)
 
-const main = async (inputs, config) => {
+const main = async (inputs, argv) => {
+  const conv = new Converter(argv)
+  
   let outStream = process.stdout
-  if (config.out) {
-    outStream = fs.createWriteStream(config.out)
+  if (argv.out) {
+    outStream = fs.createWriteStream(argv.out)
   }
 
-  const records = []
   if (inputs.length === 0) {
     // should read from stdin!
     console.error('please provide an input file')
     return
   }
-  for (const filename of inputs) {
-    const nrecs = await read.readCSV(filename)
-    records.push(...nrecs)
-    debug('Read %d rows from %s, now have %d',
-          nrecs.length, filename, records.length)
+  for (const filename of inputs) await conv.load(filename)
+
+  await conv.loadQMeta()
+  conv.toObservations()
+  
+  if (argv.json) {
+    await fs.promises.writeFile(argv.json, JSON.stringify(
+      { records: conv.records,
+        observations: conv.observations,
+        qmeta: conv.meta
+      }, null, 2))
+    console.error(`# Wrote JSON dump to ${argv.json}`)
   }
 
-  if (config.json) {
-    await fs.promises.writeFile(config.json, JSON.stringify(records, null, 2))
-    console.error(`Wrote JSON copy of CSV to ${config.json}`)
-  }
-
-  if (config['generate-config']) {
-    debug('generate-config')
-    const questions = new Set()
-    for (const r of records) {
-      for (let i = 0; i < 999; i++) {
-        const q = r['task_question_' + i]
-        if (q) questions.add(q)
-      }
+  if (argv['generate-qmeta']) {
+    debug('generate-qmeta')
+    await conv.writeQMeta(outStream)
+    if (argv.out) {
+      console.error(`# Wrote new qmeta to ${argv.out || 'stdout'}`)
     }
-    for (const q of questions) {
-      // should wrap this in CSV quoting, and include other columns
-      outStream.write(q + '\n')
-    }
-    console.error(`Wrote config`)
     return
   }
 
-  if (config['customize']) {
-    debug('reading sheet', config['customize'])
-    const cust = await fetchCSV(config['customize'])
-    debug('got %O', cust)
+  const f = b => {
+    b.foo = 1
   }
-  
-  const kb = toRDF.convert(records)
+  conv.shredAll('[ x:q ?question ].', f)
+  debug('shreded to %O', [...conv.kb])
+  // const kb = toRDF.convert(conv.records)
 
-  kb.writeTo(outStream)
+  // console.log('WRITE= %o', await conv.kb.writeAll())
+  
+  // pass the filename too, so it can be used for type guessing
+  conv.kb.writeAll({stream: outStream, filename: argv.out})
   // outStream.write(text)
 }
 

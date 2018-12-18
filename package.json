@@ -3,8 +3,11 @@
   "version": "0.0.0",
   "description": "Convert the CSV output from Meedan's 'check' software to RDF",
   "main": "index.js",
+  "bin": "cli.js",
   "scripts": {
-    "test": "npx standard && npx tap --cov test*.js test/*.js"
+    "test": "npx standard && npx tap --cov test*.js test/*.js",
+    "postinstall": "install-yargs-completion",
+    "uninstall": "uninstall-yargs-completion"
   },
   "repository": {
     "type": "git",
@@ -23,6 +26,9 @@
     "tape": "^4.9.1"
   },
   "dependencies": {
+    "@sindresorhus/is": "^0.14.0",
+    "completarr": "^0.2.1",
+    "csv": "^5.0.1",
     "csv-parse": "^4.1.0",
     "debug": "^4.1.0",
     "got": "^9.4.0",

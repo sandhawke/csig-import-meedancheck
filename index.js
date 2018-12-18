@@ -1,7 +1,133 @@
-const fs = require('fs').promises
+const fs = require('fs')
 const kgx = require('kgx')
+const read = require('./read-csv')
+const csvStringify = require('csv-stringify/lib/sync')
+const debug = require('debug')('meedancheck-to-rdf')
+const {fetchCSV} = require('./remote')
+const is = require('@sindresorhus/is');
 
-console.error('kgx = %O', kgx)
+/*
+  attributes of a Converter are basically the yargs, hopefully
+  documented by cli.js and/or the readme
+*/
+
+class Converter {
+  constructor (state) {
+    this.records = []
+    this.kb = kgx.memKB()
+    Object.assign(this, state)
+  }
+
+  async load (filename) {
+    const nrecs = await read.readCSV(filename)
+    this.records.push(...nrecs)
+    debug('Read %d rows from %s, now have %d',
+          nrecs.length, filename, this.records.length)
+  }
+
+  
+  async loadQMeta () {
+    this.meta = {}
+    if (this.qmeta) {
+      debug('fetching %o', this.qmeta)
+      this.fromQMeta = await fetchCSV(this.qmeta)
+      // debug('.. got %O', this.fromQMeta)
+      for (const qm of this.fromQMeta) {
+        this.meta[qm['Task Question']] = qm
+      }
+      // debug('.. this.meta = %O', this.meta)
+    }
+  }
+
+  toObservations () {
+    this.observations = []
+    for (const r of this.records) {
+      for (let t = 1; t <= 999999; t++) {
+        const user = r[`task_user_${t}`]
+        if (!user) break
+        const question = r[`task_question_${t}`]
+        const answer = r[`task_answer_${t}`]
+        const date = new Date(r[`task_date_${t}`])
+        const note = new Date(r[`task_note_${t}`])
+
+        let meta = this.meta[question]
+        if (!meta) {
+          meta = {}
+          this.meta[question] = meta
+        }
+        
+        // keep link to record around, for various metadata.  Would
+        // be cleaner to copy out the fields we care about, maybe?
+        const obs = {user, question, answer, date, note, meta, record: r}
+        this.observations.push(obs)
+      }
+    }
+  }
+
+  /* async */
+  writeQMeta (outStream) {
+    return new Promise(resolve => {
+      const rows = []
+      for (const [question, meta] of Object.entries(this.meta)) {
+        const row = Object.assign({}, meta)
+        row['Task Question'] = question
+        rows.push(row)
+      }
+      const opts = {
+        header: true,
+        columns: ['Task Question', 'Type']
+      }
+      outStream.write(csvStringify(rows, opts), 'utf8', resolve)
+    })
+  }
+
+  // use type, etc
+  //
+  // to build obs.signalDef
+  //              readingObjectDef, readingObjectValue, readingValue
+
+  shredAll (...args) {
+    for (const obs of this.observations) {
+      this.shred(obs, ...args)
+    }
+  }
+  
+  /**
+   * Turn an observation + graph shape into some triples in the kb
+   *
+   * The graph shape is a kgx.pattern, some trig with variables.
+   * 
+   * You can also pass a function which runs on the bindings to fill
+   * in more of them.
+   *
+   **/
+  shred (obs, pattern, f) {
+    const bindings = Object.assign({}, obs)
+
+    if (f) {
+      /*  INTERESTING IDEA BUT SERIOUS SECURITY RISK
+      if (is.string(f)) {
+        let {user, question, answer, date, note, meta, record} = obs
+        Object.assign(bindings, eval(f))
+      } else { */
+      const r = f(bindings)
+      if (r) bindings = r
+      // }
+    }
+
+    /*
+    if (pattern === 'x1') {
+      pattern = `[ <q> "${question}"`
+    }
+    */
+
+    // debug('binding %o with %o ', pattern, bindings)
+
+    this.kb.addBound(pattern, obs)
+  }
+}
+
+
 function convert (records) {
   let obsCount = 0
   let my
@@ -121,4 +247,4 @@ function convert (records) {
   }
 }
 
-module.exports = { convert }
+module.exports = { convert, Converter }
