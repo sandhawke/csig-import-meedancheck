@@ -101,29 +101,76 @@ class Converter {
    * in more of them.
    *
    **/
-  shred (obs, pattern, f) {
+  shred (obs, pattern, ...funcs) {
     const bindings = Object.assign({}, obs)
 
-    if (f) {
-      /*  INTERESTING IDEA BUT SERIOUS SECURITY RISK
-      if (is.string(f)) {
-        let {user, question, answer, date, note, meta, record} = obs
-        Object.assign(bindings, eval(f))
-      } else { */
+    /*  INTERESTING IDEA BUT SERIOUS SECURITY RISK, UNLESS I UNDERSTAND
+        WHERE the func might be coming from
+
+        if (is.string(f)) {
+          let {user, question, answer, date, note, meta, record} = obs
+          Object.assign(bindings, eval(f))
+    */
+    
+    // run each func, letting it alter or replace the bindings
+    for (const f of funcs) {
       const r = f(bindings)
       if (r) bindings = r
-      // }
     }
 
-    /*
-    if (pattern === 'x1') {
-      pattern = `[ <q> "${question}"`
+    if (!pattern || !bindings) throw ('bad arguments: ' + JSON.stringify(
+      {pattern, bindings, obs, funcs}, null, 2))
+    this.kb.addBound(pattern, bindings)
+  }
+
+  /* the flags, from --help    (bumped, camped, vamped, temped, romped, ... :-)
+  -m, --metadata-style                                 [array] [default: ["ng"]]
+  -p, --predicate-style                      [array] [default: ["tf","nc","ag"]]
+  -e, --encoding-depends-on                     [array] [default: ["all","one"]]
+  -d, --direct                                         [array] [default: [true]]
+  */
+  run (flags) {
+    const  {mstyle, pstyle, dstyle, estyle} = flags
+    let pat, pfunc, mfunc
+
+    // should unbounds be genid'd?
+    // it'd be nice to parameterize that for re-use.
+    //    kb.blankFor(serializableObject)
+    // just like in Horn logic
+
+    
+    // pstyle determines func, sets signal, reading
+    switch (pstyle) {
+    case 'tf':
+      pfunc = b => {
+        b.signal = this.kb.ns.x[b.question + b.answer]  // NOT REALLY
+        b.reading = true
+      }
+      break;
+    case 'mc':
+      pfunc = b => {
+        b.signal = this.kb.ns.x[b.question]  // NOT REALLY
+        b.reading = b.answer
+      }
+      break;
     }
-    */
+    
+    if (mstyle === 'ng') {
+      mfunc = b => {
+        b.subject = this.kb.blankNode()
+        b.obs = this.kb.blankNode()
+      }
+      pat = `
+?obs { ?subject ?signal ?reading }
+?obs x:by ?user;
+     dc:date ?date.`
+    }
 
-    // debug('binding %o with %o ', pattern, bindings)
-
-    this.kb.addBound(pattern, obs)
+    if (pat && pfunc && mfunc) {
+      this.shredAll(pat, pfunc, mfunc)
+    } else {
+      console.error('Combination not implemented %o', flags)
+    }
   }
 }
 

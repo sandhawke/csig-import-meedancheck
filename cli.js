@@ -44,6 +44,16 @@ yargs
   })
   */
   .help()
+  .array(['m', 'p', 'e', 'd'])
+  .default('m', ['ng'])
+  .default('p', ['tf', 'ag', 'mc'])
+  .default('e', ['all', 'one'])
+  .default('d', [true])
+  .alias('m', 'metadata-style')
+  .alias('p', 'predicate-style')
+  .alias('e', 'encoding-depends-on')
+  .alias('d', 'direct')
+  // .choices('p', ['tf', 'ag', 'nc'])   doesn't allow multples, so nope.
   .strict()
   .argv
 
@@ -86,19 +96,21 @@ const main = async (inputs, argv) => {
     return
   }
 
-  const f = b => {
-    b.foo = 1
+  for (const mstyle of argv.m) {  // --metadata-style
+    for (const pstyle of argv.p) { // --predicate-style
+      for (const estyle of argv.e) { // --encoding-depends-on
+        for (const dstyle of argv.d) { // --direct
+          const flags = {mstyle, pstyle, estyle, dstyle}
+          debug('shredding as: %o', flags)
+          conv.run(flags)
+        }
+      }
+    }
   }
-  conv.shredAll('[ x:q ?question ].', f)
-  debug('shreded to %O', [...conv.kb])
-  // const kb = toRDF.convert(conv.records)
-
-  // console.log('WRITE= %o', await conv.kb.writeAll())
   
   // pass the filename too, so it can be used for type guessing
   conv.kb.writeAll({stream: outStream, filename: argv.out})
-  // outStream.write(text)
 }
 
-  main(argv._, argv)
+main(argv._, argv)
 
