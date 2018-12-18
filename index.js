@@ -14,9 +14,40 @@ const is = require('@sindresorhus/is');
 class Converter {
   constructor (state) {
     this.records = []
+    this.sources = []
     this.kb = kgx.memKB()
     Object.assign(this, state)
   }
+
+  async convert () {
+    for (const filename of this.sources) await this.load(filename)
+    
+    await this.loadQMeta()
+    this.toObservations()
+    this.applyTypes()
+  
+    if (this.jsonDump) {
+      await fs.promises.writeFile(this.jsonDumpPrefix + 'records.json',
+                                  JSON.stringify(this.records, null, 2))
+      await fs.promises.writeFile(this.jsonDumpPrefix + 'observations.json',
+                                  JSON.stringify(this.observations, null, 2))
+      await fs.promises.writeFile(this.jsonDumpPrefix + 'qmeta.json',
+                                  JSON.stringify(this.meta, null, 2))
+    }
+
+    for (const mstyle of this.m) {  // --metadata-style
+      for (const pstyle of this.p) { // --predicate-style
+        for (const estyle of this.e) { // --encoding-depends-on
+          for (const dstyle of this.d) { // --direct
+            const flags = {mstyle, pstyle, estyle, dstyle}
+            debug('shredding as: %o', flags)
+            this.run(flags)
+          }
+        }
+      }
+    }
+  }
+  
 
   async load (filename) {
     const nrecs = await read.readCSV(filename)
@@ -24,7 +55,6 @@ class Converter {
     debug('Read %d rows from %s, now have %d',
           nrecs.length, filename, this.records.length)
   }
-
   
   async loadQMeta () {
     this.meta = {}
@@ -33,9 +63,10 @@ class Converter {
       this.fromQMeta = await fetchCSV(this.qmeta)
       // debug('.. got %O', this.fromQMeta)
       for (const qm of this.fromQMeta) {
+        qm.possibleAnswersArray = qm['Possible Answers'].split(/\s*====+\s*/).map(x => x.trim())
         this.meta[qm['Task Question']] = qm
       }
-      // debug('.. this.meta = %O', this.meta)
+      debug('.. this.meta = %O', this.meta)
     }
   }
 
@@ -56,26 +87,77 @@ class Converter {
           this.meta[question] = meta
         }
         
-        // keep link to record around, for various metadata.  Would
-        // be cleaner to copy out the fields we care about, maybe?
-        const obs = {user, question, answer, date, note, meta, record: r}
+        const copyProperties = 'project_id report_id report_title media_content media_url'.split(' ')
+
+        const obs = {user, question, answer, date, note, meta}
+        for (const p of copyProperties) {
+          obs[p] = r[p]
+        }
         this.observations.push(obs)
       }
     }
   }
 
-  /* async */
+  applyTypes () {
+    console.error('AT RUNNING')
+    for (const obs of this.observations) {
+      let meta = this.meta[obs.question]
+      let type = meta.Type
+      if (!type || type === '') type = 'string'
+
+      if (type === 'ordinal' || type === 'nominal') {
+        obs.answerIndex = meta.possibleAnswersArray.indexOf(obs.answer)
+        // debug('applyType ord/nom %O', obs)
+        if (obs.answerIndex === -1) {
+          console.error('Unexpected answer %O', { obs, meta })
+        }
+      } else if (type === 'multi') {
+        obs.answerSet = []   // [3]=true means the answer with index 3 was selected
+        for (const [i, a] of meta.possibleAnswersArray.entries()) {
+          const pos = obs.answer.indexOf(a)
+          debug('trying', i, a, pos)
+          if (pos >= 0) {
+            debug('match at', i, a)
+            obs.answerSet[i] = true
+          } else {
+            obs.answerSet[i] = false
+          }
+        }
+        debug('applyType multi %O', obs)
+
+      } else if (type.startsWith('agree')) {
+        
+      } else if (type === 'boolean') {
+      } else if (type === 'integer') {
+      } else if (type === 'decimal') {
+      } else if (type === 'string') {
+      } else {
+        console.error('Unexpected type, ', type) // { obs, meta })
+      }
+    }
+  }
+
+  /* actually async */
   writeQMeta (outStream) {
     return new Promise(resolve => {
+      for (const obs of this.observations) {
+        const m = this.meta[obs.question]
+        if (!m.allAnswers) m.allAnswers = new Set()
+        m.allAnswers.add(obs.answer)
+      }
+
       const rows = []
       for (const [question, meta] of Object.entries(this.meta)) {
         const row = Object.assign({}, meta)
         row['Task Question'] = question
+        if (meta.allAnswers) {
+          row['Possible Answers'] = [...meta.allAnswers.values()].join(' ==== ')
+        }
         rows.push(row)
       }
       const opts = {
         header: true,
-        columns: ['Task Question', 'Type']
+        columns: ['Task Question', 'Type', 'Signal Label', 'Possible Answers', 'Phrased as a Statement']
       }
       outStream.write(csvStringify(rows, opts), 'utf8', resolve)
     })
@@ -124,9 +206,9 @@ class Converter {
   }
 
   /* the flags, from --help    (bumped, camped, vamped, temped, romped, ... :-)
-  -m, --metadata-style                                 [array] [default: ["ng"]]
-  -p, --predicate-style                      [array] [default: ["tf","nc","ag"]]
-  -e, --encoding-depends-on                     [array] [default: ["all","one"]]
+  -m, --metadataStyle                                 [array] [default: ["ng"]]
+  -p, --predicateStyle                      [array] [default: ["tf","nc","ag"]]
+  -e, --encodingDependsOn                     [array] [default: ["all","one"]]
   -d, --direct                                         [array] [default: [true]]
   */
   run (flags) {
