@@ -1,7 +1,7 @@
-# meedancheck-to-rdf
+# csig-import-meedancheck
 [![NPM version][npm-image]][npm-url]
 
-Convert the CSV output from Meedan's 'check' software to RDF
+Convert the CSV output from Meedan's 'check' software to Credibility-Signals RDF
 
 ## Install
 
@@ -12,7 +12,7 @@ Convert the CSV output from Meedan's 'check' software to RDF
   temporary auto-install.)
 
 ```terminal
-$ npm install -g meedancheck-to-rdf
+$ npm install -g csig-import-meedancheck
 ```
 
 ## Command-Line Usage
@@ -21,7 +21,7 @@ Convert one or more [Check](https://meedan.com/en/check/) CSV files to
 an RDF file like this:
 
 ```terminal
-$ npx [options] meedancheck-to-rdf [input filenames...] --out [output filename]
+$ npx [options] csig-import-meedancheck [input filenames...] --out [output filename]
 ```
 
 The output filename suffix is used to determine the output RDF syntax,
@@ -39,7 +39,7 @@ arguments as the command line (thanks to
 Example:
 
 ```js
-const { Converter } = require('meedancheck-to-rdf')
+const { Converter } = require('csig-import-meedancheck')
 
 const conv = new Converter({
   qmeta: 'https://docs.google.com/spreadsheets/d/1IF8RsEcwfsBPd85YZw0kBoNOOqOZ0Tc2ksKprIoCjqk',
@@ -77,7 +77,7 @@ want.
 
 There are many different proposals for how map this data to RDF. We
 implement several of them, via different switches.  Use --help to see
-the options and defaults, and for details see [Mapping Credibility Signal Questionnaire Data to RDF](https://sandhawke.github.io/meedancheck-to-rdf/about-the-schema.html).
+the options and defaults, and for details see [Mapping Credibility Signal Questionnaire Data to RDF](https://sandhawke.github.io/csig-import-meedancheck/about-the-schema.html).
 
 ### Other Options
 
@@ -112,9 +112,9 @@ These two converted datasets are also available in this repo under /sample/
 
 ## Our Output
 
-See [Mapping Credibility Signal Questionnaire Data to RDF](https://sandhawke.github.io/meedancheck-to-rdf/about-the-schema.html).
+See [Mapping Credibility Signal Questionnaire Data to RDF](https://sandhawke.github.io/csig-import-meedancheck/about-the-schema.html).
 
-[npm-image]: https://img.shields.io/npm/v/meedancheck-to-rdf.svg?style=flat-square
-[npm-url]: https://npmjs.org/package/meedancheck-to-rdf
+[npm-image]: https://img.shields.io/npm/v/csig-import-meedancheck.svg?style=flat-square
+[npm-url]: https://npmjs.org/package/csig-import-meedancheck
 
 
