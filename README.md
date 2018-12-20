@@ -3,6 +3,8 @@
 
 Convert the CSV output from Meedan's 'check' software to Credibility-Signals RDF
 
+**STATUS: Still slightly aspirational.  Don't try using it yet.**
+
 ## Install
 
 **Step 1**.  [Install Node.JS](https://nodejs.org/en/)
