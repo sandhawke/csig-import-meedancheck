@@ -3,40 +3,103 @@
 
 Convert the CSV output from Meedan's 'check' software to RDF
 
-**NOT REALLY IMPLEMENTED YET**
+## Install
 
-## Usage
+**Step 1**.  [Install Node.JS](https://nodejs.org/en/)
 
-Installation isn't needed if you have node.js installed.  Modern version of node.js include the *npx* command for executing any npmjs module, so you can just do this:
+**Step 2**.  (Optional, but good if you're going to run this more than
+  once. This step is optional because the "npx" command does a
+  temporary auto-install.)
 
 ```terminal
-$ npx [options] meedancheck-to-rdf yourdata.csv > out.nq  
+$ npm install -g meedancheck-to-rdf
 ```
 
-### Options
+## Command-Line Usage
 
-* --name=NAME some of the conversions embed a name for this dataset
+Convert one or more [Check](https://meedan.com/en/check/) CSV files to
+an RDF file like this:
 
-* --base in N-Quads, metadata needs to be written knowing the eventual permanent location of the data, which is essentially the base IRI
+```terminal
+$ npx [options] meedancheck-to-rdf [input filenames...] --out [output filename]
+```
 
-* --predicates=((tf|ag|mc)(o|a)|all)  See [Mapping Credibility Signal Questionnaire Data to RDF](https://sandhawke.github.io/meedancheck-to-rdf/about-the-schema.html)
+The output filename suffix is used to determine the output RDF syntax,
+like .trig for [Trig](https://www.w3.org/TR/trig/) and .nq for
+[N-Quads](https://www.w3.org/TR/n-quads/)
 
-* --meta=(ng | customrei | drei | irei | wikidata)  See [Mapping Credibility Signal Questionnaire Data to RDF](https://sandhawke.github.io/meedancheck-to-rdf/about-the-schema.html)
+## Library Usage
 
-* --config=(spreadsheet url)  This config maps "task_question" strings to information about that question needed for some options:
-    * Signal Label, should correspond exactly to Signals spec
-    * Agreement Statement, a rephrasing of the question to have a generic agreement level as its answer (for aga and ago style predicates)
-    * Allowed Answers, list of allowed answers, separated by newline or //
+The converter can be used as an imported module taking exactly same (long-form)
+arguments as the command line (thanks to
+[yargs](https://yargs.js.org/)), except:
+* it doesn't do any output. Instead, you query or serialize its .kb field.  This field holds an iterable of [standard quads](http://rdf.js.org/#quad-interface).
+* you name the inputs with a `sources` array argument
+
+Example:
+
+```js
+const { Converter } = require('meedancheck-to-rdf')
+
+const conv = new Converter({
+  qmeta: 'https://docs.google.com/spreadsheets/d/1IF8RsEcwfsBPd85YZw0kBoNOOqOZ0Tc2ksKprIoCjqk',
+  jsonDumpPrefix: 'saved-',
+  metadataStyle: ['ng', 'rr'],
+  sources: ['file1.csv', 'file2.csv']
+})
+
+conv.convert()
+    .then(() => {
+        console.log('Got %d quads', [...conv.kb].length)
+    })
+```
+
+You can, of course, subclass Converter to change elements of what it does.
+
+### Settings
+
+All the command line options can also be specified as environment
+variables with the prefix "MEEDANRDF_" or in a JSON file called
+settings.json (which you can override with the --settings option).
+
+### QMeta
+
+The converter can do a much better job with some extra information
+about each question (some **q**uestion **meta**data).  You can provide
+this in a "qmeta" file, which this program can read directly from a
+public Google Spreadsheet. You can start by asking the program to make
+its best guess with the --generateQMeta option, then load that CSV
+into a new sheet, make the sheet public, and specify it in the future
+with --qmeta.  Then edit the sheet as necessary to get the results you
+want.
+
+### Options for Controlling Output Mapping
+
+There are many different proposals for how map this data to RDF. We
+implement several of them, via different switches.  Use --help to see
+the options and defaults, and for details see [Mapping Credibility Signal Questionnaire Data to RDF](https://sandhawke.github.io/meedancheck-to-rdf/about-the-schema.html).
+
+### Other Options
+
+The other options should be self-explanitory from --help.
 
 ## Our Input (the Meedan-Check format)
 
-Very **wide** CSV files.  One row per item considered per user.  Each signal obtained from the user about that item is recorded in a set of five adjacent columns (task_question_N, task_user_N, task_date_N, task_answer_N, task_note_N), so for 20 signals we'll have 100 "task" columns, plus some general stuff for the row.
+For now, this software only understands the data export from
+[Check](https://meedan.com/en/check/). It shouldn't be too hard to
+adapt it to similar formats like SurveyMonkey's output, if the need
+arises.
+
+This format is CSV (or XLSX, see below) with one row per article
+considered by the user.  The row starts with several fields about the
+study being done, the user, and the article being considered.  For each question answered, there is a set of five adjacent columns (task_question_N, task_user_N, task_date_N, task_answer_N, task_note_N), so for 20 signals we'll have 100 "task" columns.
 
 Examples:
 * <https://data.world/credibilitycoalition/basic-november2018> (one xlsx file with 8 sheets)
 * <https://data.world/credibilitycoalition/webconf-2018/> (three csv files)
 
-The multi-sheet xlsx files (like nov2018) can be converted to csv like this:
+On debian-derived Linux, the multi-sheet xlsx files (like nov2018) can
+be converted to csv like this:
 
 ```terminal
 $ sudo apt install gnumeric
@@ -44,6 +107,8 @@ $ ssconvert -S credibility-coalition-study-3a-batch1.xlsx basicnov2018.csv
 ```
 
 That will write basicnov2018.csv.0, basicnov2018.csv.1, etc.
+
+These two converted datasets are also available in this repo under /sample/
 
 ## Our Output
 
