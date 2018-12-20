@@ -10,9 +10,11 @@ require('completarr')()
 
 yargs
   // .completion()   now handled by completarr
+  .help()
   .usage('$0 [options] [input_files...]')
-  .example('$0 sample/basicnov2018.csv.1 -d > out.nq')
-  .example('$0 sample/*csv* -g -o out-qmeta.csv')
+  .example('$0 sample/basicnov2018.csv.1', 'Convert to N-Quads, all default shapes')
+  .example('$0 sample/*csv* -g -o out-qmeta.csv', 'Generate qmeta')
+  .example('$0 sample/*csv* -o out.nq -rmp', 'Just the "raw" shape, setting m and p to nothing')
   .config('settings')
   .env('MEEDANRDF')
   .epilogue('All values can be set in config file and environment variables. For details see https://sandhawke.github.io/meedancheck-to-rdf')
@@ -40,8 +42,12 @@ yargs
     describe: 'Prefix for jsonDump',
     default: 'out-'
   })
-  .help()
-  .group(['m', 'p', 'e', 'd'], 'Control dataset output shapes:')
+  .option('raw', {
+    boolean: true,
+    alias: 'r',
+    describe: 'Very basic RDF encoding, doesnt create predicates'
+  })
+  .group(['r', 'm', 'p', 'e', 'd'], 'Control dataset output shapes:')
   .array(['m', 'p', 'e', 'd'])
   .default('m', ['ng'])
   .default('p', ['tf', 'ag', 'mc'])
@@ -82,7 +88,9 @@ const main = async (sources, argv) => {
     }
   } else {
     // pass the filename too, so it can be used for type guessing
-    conv.kb.writeAll({stream: outStream, filename: argv.out})
+    const opts = {stream: outStream, filename: argv.out}
+    if (!argv.out) opts.format = 'application/n-quads'
+    conv.kb.writeAll(opts)
   }
 }
 

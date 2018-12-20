@@ -26,7 +26,7 @@ class Converter {
     await this.loadQMeta()
     this.toObservations()
     this.applyTypes()
-  
+    
     if (this.jsonDump) {
       await fs.promises.writeFile(this.jsonDumpPrefix + 'records.json',
                                   JSON.stringify(this.records, null, 2))
@@ -37,20 +37,23 @@ class Converter {
     }
 
     this.check()
+
+    if (this.raw) {
+      this.runRaw()
+    }
     
-    for (const mstyle of this.m) {  // --metadata-style
-      for (const pstyle of this.p) { // --predicate-style
-        for (const estyle of this.e) { // --encoding-depends-on
-          for (const dstyle of this.d) { // --direct
+    for (const mstyle of this.metadataStyle) {
+      for (const pstyle of this.predicateStyle) {
+        for (const estyle of this.encodingDependsOn) {
+          for (const dstyle of this.direct) {
             const flags = {mstyle, pstyle, estyle, dstyle}
-            debug('shredding as: %o', flags)
+            // debug('shredding as: %o', flags)
             this.run(flags)
           }
         }
       }
     }
   }
-  
 
   async load (filename) {
     const nrecs = await read.readCSV(filename)
@@ -58,7 +61,7 @@ class Converter {
     debug('Read %d rows from %s, now have %d',
           nrecs.length, filename, this.records.length)
   }
-  
+
   async loadQMeta () {
     this.meta = {}
     if (this.qmeta) {
@@ -66,7 +69,9 @@ class Converter {
       this.fromQMeta = await fetchCSV(this.qmeta)
       // debug('.. got %O', this.fromQMeta)
       for (const qm of this.fromQMeta) {
-        qm.possibleAnswersArray = qm['Possible Answers'].split(/\s*====+\s*/).map(x => x.trim())
+        let arr = qm['Possible Answers'].split(/\s*====+\s*/).map(x => x.trim())
+        arr = arr.filter(x => x !== '')
+        qm.possibleAnswersArray = arr
         this.meta[qm['Task Question']] = qm
       }
       debug('.. this.meta = %O', this.meta)
@@ -144,7 +149,7 @@ class Converter {
       answerProperty(obs)
     }
   }
-  
+
   // use type, etc
   //
   // to build obs.signalDef
@@ -155,7 +160,7 @@ class Converter {
       this.shred(obs, ...args)
     }
   }
-  
+
   /**
    * Turn an observation + graph shape into some triples in the kb
    *
@@ -172,8 +177,8 @@ class Converter {
         WHERE the func might be coming from
 
         if (is.string(f)) {
-          let {user, question, answer, date, note, meta, record} = obs
-          Object.assign(bindings, eval(f))
+        let {user, question, answer, date, note, meta, record} = obs
+        Object.assign(bindings, eval(f))
     */
     
     // run each func, letting it alter or replace the bindings
@@ -184,17 +189,50 @@ class Converter {
 
     if (!pattern || !bindings) throw ('bad arguments: ' + JSON.stringify(
       {pattern, bindings, obs, funcs}, null, 2))
-    this.kb.addBound(pattern, bindings)
+    this.kb.addBound(pattern, bindings, 'skip')
   }
 
+  runRaw () {
+    let pat, pfunc
+    
+    pat = `
+?obs 
+    dc:date ?date;
+    x:by ?user;
+    x:item ?subject;
+    x:question ?question;
+    x:answer ?answer;
+    x:type ?questionType;
+    x:possibleAnswers ?possibleAnswers.
+`
+
+    pfunc = b => {
+      b.obs = this.kb.blankNode()
+      b.subject = this.kb.namedNode(b.media_url)
+      b.questionType = b.meta.Type || null
+      b.possibleAnswers = null
+      // maybe -- bound to null == omit this triple
+      const array = b.meta.possibleAnswersArray
+      debug('array: %o', array)
+      if (array && array.length > 0) {
+        debug('... usable')
+        // if kgx supported array encodings
+        // b.possibleAnswers = array
+        b.possibleAnswers = JSON.stringify(array).slice(1, -1)
+      }
+    }
+    this.shredAll(pat, pfunc)
+  }
+  
+
   /* the flags, from --help    (bumped, camped, vamped, temped, romped, ... :-)
-  -m, --metadataStyle                                 [array] [default: ["ng"]]
-  -p, --predicateStyle                      [array] [default: ["tf","nc","ag"]]
-  -e, --encodingDependsOn                     [array] [default: ["all","one"]]
-  -d, --direct                                         [array] [default: [true]]
+     -m, --metadataStyle                                 [array] [default: ["ng"]]
+     -p, --predicateStyle                      [array] [default: ["tf","nc","ag"]]
+     -e, --encodingDependsOn                     [array] [default: ["all","one"]]
+     -d, --direct                                         [array] [default: [true]]
   */
   run (flags) {
-    const  {mstyle, pstyle, dstyle, estyle} = flags
+    const  {raw, mstyle, pstyle, dstyle, estyle} = flags
     let pat, pfunc, mfunc
 
     // should unbounds be genid'd?
@@ -242,7 +280,6 @@ class Converter {
     }
   }
 }
-
 
 function convert (records) {
   let obsCount = 0
