@@ -1,6 +1,6 @@
 {
   "name": "csig-import-meedancheck",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "description": "Convert the CSV output from Meedan's 'check' software to Credibility-Signals RDF",
   "main": "index.js",
   "bin": "cli.js",
