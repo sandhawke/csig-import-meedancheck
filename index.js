@@ -5,6 +5,7 @@ const csvStringify = require('csv-stringify/lib/sync')
 const debug = require('debug')('meedancheck-to-rdf')
 const {fetchCSV} = require('./remote')
 const is = require('@sindresorhus/is');
+const {applyType, answerProperty} = require('./types')
 
 /*
   attributes of a Converter are basically the yargs, hopefully
@@ -35,6 +36,8 @@ class Converter {
                                   JSON.stringify(this.meta, null, 2))
     }
 
+    this.check()
+    
     for (const mstyle of this.m) {  // --metadata-style
       for (const pstyle of this.p) { // --predicate-style
         for (const estyle of this.e) { // --encoding-depends-on
@@ -89,7 +92,8 @@ class Converter {
         
         const copyProperties = 'project_id report_id report_title media_content media_url'.split(' ')
 
-        const obs = {user, question, answer, date, note, meta}
+        // take meta out?
+        const obs = {user, question, answer, date, note, meta} // nah:,  meta
         for (const p of copyProperties) {
           obs[p] = r[p]
         }
@@ -99,41 +103,13 @@ class Converter {
   }
 
   applyTypes () {
-    console.error('AT RUNNING')
+    function unexpected (obs) {
+      console.error('Unexpected answer %O for %O', obs.answer, obs.question)
+    }
+    
     for (const obs of this.observations) {
       let meta = this.meta[obs.question]
-      let type = meta.Type
-      if (!type || type === '') type = 'string'
-
-      if (type === 'ordinal' || type === 'nominal') {
-        obs.answerIndex = meta.possibleAnswersArray.indexOf(obs.answer)
-        // debug('applyType ord/nom %O', obs)
-        if (obs.answerIndex === -1) {
-          console.error('Unexpected answer %O', { obs, meta })
-        }
-      } else if (type === 'multi') {
-        obs.answerSet = []   // [3]=true means the answer with index 3 was selected
-        for (const [i, a] of meta.possibleAnswersArray.entries()) {
-          const pos = obs.answer.indexOf(a)
-          debug('trying', i, a, pos)
-          if (pos >= 0) {
-            debug('match at', i, a)
-            obs.answerSet[i] = true
-          } else {
-            obs.answerSet[i] = false
-          }
-        }
-        debug('applyType multi %O', obs)
-
-      } else if (type.startsWith('agree')) {
-        
-      } else if (type === 'boolean') {
-      } else if (type === 'integer') {
-      } else if (type === 'decimal') {
-      } else if (type === 'string') {
-      } else {
-        console.error('Unexpected type, ', type) // { obs, meta })
-      }
+      applyType(obs, meta, unexpected)
     }
   }
 
@@ -163,6 +139,12 @@ class Converter {
     })
   }
 
+  check () {
+    for (const obs of this.observations) {
+      answerProperty(obs)
+    }
+  }
+  
   // use type, etc
   //
   // to build obs.signalDef
@@ -220,12 +202,17 @@ class Converter {
     //    kb.blankFor(serializableObject)
     // just like in Horn logic
 
-    
     // pstyle determines func, sets signal, reading
     switch (pstyle) {
     case 'tf':
       pfunc = b => {
-        b.signal = this.kb.ns.x[b.question + b.answer]  // NOT REALLY
+        const ansProp = answerProperty(b)
+        // ...
+        let t = ' * Answer: ' + ansProp + '=' + JSON.stringify(b[ansProp])
+        if (estyle === 'all') {
+          t += ' * Possible answers: ' + JSON.stringify(b.meta.possibleAnswersArray).slice(1, -1)
+        }
+        b.signal = this.kb.ns.x[b.question + t]  // NOT REALLY
         b.reading = true
       }
       break;
