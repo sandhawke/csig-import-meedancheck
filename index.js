@@ -2,10 +2,11 @@ const fs = require('fs')
 const kgx = require('kgx')
 const read = require('./read-csv')
 const csvStringify = require('csv-stringify/lib/sync')
-const debug = require('debug')('meedancheck-to-rdf')
 const {fetchCSV} = require('./remote')
 const is = require('@sindresorhus/is');
 const {applyType, answerProperty} = require('./types')
+const setdefault = require('setdefault')
+const debug = require('debug')('meedancheck')
 
 /*
   attributes of a Converter are basically the yargs, hopefully
@@ -25,6 +26,7 @@ class Converter {
     
     await this.loadQMeta()
     this.toObservations()
+    this.splitMulti()
     this.applyTypes()
     
     if (this.jsonDump) {
@@ -36,6 +38,8 @@ class Converter {
                                   JSON.stringify(this.meta, null, 2))
     }
 
+    if (this.generateQMeta) return
+    
     this.check()
 
     if (this.raw) {
@@ -53,6 +57,9 @@ class Converter {
         }
       }
     }
+
+    this.crossref()
+    // this.irrAll()
   }
 
   async load (filename) {
@@ -72,22 +79,29 @@ class Converter {
         let arr = qm['Possible Answers'].split(/\s*====+\s*/).map(x => x.trim())
         arr = arr.filter(x => x !== '')
         qm.possibleAnswersArray = arr
+        qm.loadedQMeta = true
         this.meta[qm['Task Question']] = qm
       }
-      debug('.. this.meta = %O', this.meta)
+      // debug('.. this.meta = %O', this.meta)
     }
   }
 
   toObservations () {
     this.observations = []
     for (const r of this.records) {
-      for (let t = 1; t <= 999999; t++) {
+      console.log('---')
+      const count = parseInt(r[`tasks_count`])
+      for (let t = 1; t <= count; t++) {
         const user = r[`task_user_${t}`]
-        if (!user) break
-        const question = r[`task_question_${t}`]
-        const answer = r[`task_answer_${t}`]
+        if (!user) {
+          console.log('no task %d', t)
+          continue
+        }
+        console.log('user %o %d', user, t)
+        const question = r[`task_question_${t}`].trim()
+        const answer = r[`task_answer_${t}`].trim()
         const date = new Date(r[`task_date_${t}`])
-        const note = new Date(r[`task_note_${t}`])
+        const note = r[`task_note_${t}`].trim()
 
         let meta = this.meta[question]
         if (!meta) {
@@ -103,8 +117,58 @@ class Converter {
           obs[p] = r[p]
         }
         this.observations.push(obs)
+        // if (obs.meta.Type === 'multi') debug('added obs %O', obs)
       }
     }
+  }
+
+  /** 
+   * Turn any type=multi observations (that is, "select all answers
+   * that apply") into multiple boolean observations.
+   *
+   * Should we remove the type=multi ones?
+   */
+  splitMulti () {
+    for (const obs of this.observations) {
+      if (obs.meta.Type === 'multi') {
+        debug('\n\n\n*************expanding %O', obs)
+        for (const pa of obs.meta.possibleAnswersArray) {
+          const question = `To the question, ${JSON.stringify(obs.question)}, answer is ${JSON.stringify(pa)}`
+          let meta = this.meta[question]
+          if (!meta) {
+            meta = {
+              'Task Question': question,
+              'Type': 'boolean',
+              'Signal Label': '', // Hmmmmmmmm.   Maybe we'll pull this out and re-gen it?!
+              'Phrased as a Statement': question,
+              possibleAnswersArray: [], // expected even for boolean :-(
+              createdInSplitMulti: true
+            }
+            this.meta[question] = meta
+          }
+
+          const newObs = Object.assign({}, obs)
+          newObs.question = question
+          newObs.meta = meta
+
+          
+          debug('.. answer BEFORE is %o', obs.answer, newObs.answer)
+          const pos = obs.answer.indexOf(pa)
+          debug('.. index is', pos)
+          debug('.. obs === newObs', obs === newObs)
+          if (pos >= 0) {
+            // this "possible answer" text occurs inside the answer given, so call it a match
+            newObs.answer = 'true'
+          } else {
+            newObs.answer = 'false'
+          }
+          debug('.. answer AFTER is %o', obs.answer, newObs.answer)
+          debug('==== adding %O', newObs)
+          this.observations.push(newObs)
+        }
+      }
+    }
+    this.observations = this.observations.filter(obs => obs.meta.Type != 'multi')
   }
 
   applyTypes () {
@@ -213,9 +277,9 @@ class Converter {
       b.possibleAnswers = null
       // maybe -- bound to null == omit this triple
       const array = b.meta.possibleAnswersArray
-      debug('array: %o', array)
+      // debug('array: %o', array)
       if (array && array.length > 0) {
-        debug('... usable')
+        // debug('... usable')
         // if kgx supported array encodings
         // b.possibleAnswers = array
         b.possibleAnswers = JSON.stringify(array).slice(1, -1)
@@ -264,7 +328,7 @@ class Converter {
     
     if (mstyle === 'ng') {
       mfunc = b => {
-        b.subject = this.kb.blankNode()
+        b.subject = this.kb.namedNode(b.media_url)
         b.obs = this.kb.blankNode()
       }
       pat = `
@@ -277,6 +341,87 @@ class Converter {
       this.shredAll(pat, pfunc, mfunc)
     } else {
       console.error('Combination not implemented %o', flags)
+    }
+  }
+
+  // DO THESE ON THE RDF, I THINK.
+  //
+  // uses m=ng, p=ag/mc
+  // 
+  async irrAll () {
+    const d = new Map()
+    const x = 'https://example.org/#'.length
+    const pat = `
+?obs { ?subject ?signal ?reading }
+?obs x:by ?user.`
+    for (const b of this.kb.solve(pat)) {
+      // essentially: d[signal][subject][user] = rating
+      setdefault.map(setdefault.map(d, b.signal.value.slice(x)), b.subject.value)
+        .set(b.user.value, b.reading.value)
+    }
+    console.log('d=%O', d)
+    console.log('signals=%O', d.keys())
+    for (const [signal, persignal] of d.entries()) {
+      console.log('signal %o', signal)
+      for (const [subject, persubject] of persignal.entries()) {
+        console.log('  subject %o', subject)
+        for (const [user, reading] of persubject.entries()) {
+          console.log('      user: %o ratign %o', user, reading)
+        }
+      }
+    }
+    /*
+    // for each signal
+    // gather the ratings for each rater; rater == column, article == row
+    for (const sig of this.kb.match(signals)) {
+      irr(sig)
+      
+      for (const {rater, article, rating} of this.kb.solve('...')) {
+        // maybe:  table[row][col] = rating
+        // or      sort by row & col, to get list of ratings
+        //     (but missing values would throw us off)
+        row[article][rater] = rating
+      }
+      
+    }*/
+  }
+
+  /*
+  async correlation () {
+    // column == variable (basically signal, sometimes variable)
+    // row == observation
+    
+    const rows = {}   // by media_url + rater
+    const columnNames 
+    for (const obs of this.observations) {
+
+    }
+    const opts = {
+      header: true,
+      columns: ['Task Question', 'Type', 'Signal Label', 'Possible Answers', 'Phrased as a Statement']
+    }
+    await fs.promises.writeFile('out-for-cor.csv', csvStringify(rows, opts), 'utf8')
+
+  }
+  */
+
+  crossref () {
+    const d = new Map()
+    for (const obs of this.observations) {
+      setdefault.map(setdefault.map(d, obs.question), obs.media_url)
+        .set(obs.user, obs.answer)
+    }
+    
+    console.log('d=%O', d)
+    console.log('signals=%O', d.keys())
+    for (const [signal, persignal] of d.entries()) {
+      console.log('signal %o', signal)
+      for (const [subject, persubject] of persignal.entries()) {
+        console.log('  subject %o', subject)
+        for (const [user, reading] of persubject.entries()) {
+          console.log('      user: %o ratign %o', user, reading)
+        }
+      }
     }
   }
 }

@@ -34,7 +34,7 @@ const applyType = (obs, meta, unexpected) => {
   // save for later encoding, I guess
   meta.possibleAnswersArray = array
   
-  const index = array.indexOf(obs.answer)
+  const index = array && array.indexOf(obs.answer)
   
   if (type === 'ordinal' || type === 'nominal') {
     if (index >= -1) {

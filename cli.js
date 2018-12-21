@@ -73,7 +73,12 @@ const main = async (sources, argv) => {
 
   const conv = new Converter(argv)
   conv.sources = sources
-  await conv.convert()
+  try {
+    await conv.convert()
+  } catch (e) {
+    console.error('Error during conversion')
+    throw e
+  }
   
   let outStream = process.stdout
   if (argv.out) {
