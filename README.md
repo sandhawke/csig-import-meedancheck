@@ -10,8 +10,8 @@ Convert the CSV output from Meedan's 'check' software to Credibility-Signals RDF
 **Step 1**.  [Install Node.JS](https://nodejs.org/en/)
 
 **Step 2**.  (Optional, but good if you're going to run this more than
-  once. This step is optional because the "npx" command does a
-  temporary auto-install.)
+  once. This step is optional because the "npx" command below does a
+  temporary auto-install if the package isn't already installed.)
 
 ```terminal
 $ npm install -g csig-import-meedancheck
