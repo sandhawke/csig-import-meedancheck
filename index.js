@@ -90,15 +90,14 @@ class Converter {
   toObservations () {
     this.observations = []
     for (const r of this.records) {
-      console.log('---')
       const count = parseInt(r[`tasks_count`])
       for (let t = 1; t <= count; t++) {
         const user = r[`task_user_${t}`]
         if (!user) {
-          console.log('no task %d', t)
+          // console.log('no task %d', t)
           continue
         }
-        console.log('user %o %d', user, t)
+        // console.log('user %o %d', user, t)
         const question = r[`task_question_${t}`].trim()
         const answer = r[`task_answer_${t}`].trim()
         const date = new Date(r[`task_date_${t}`])
@@ -106,7 +105,11 @@ class Converter {
 
         let meta = this.meta[question]
         if (!meta) {
-          meta = {}
+          meta = {
+            createdIn_toObs: true,
+            // need to guess the type
+            Type: 'string'
+          }
           this.meta[question] = meta
         }
         
@@ -169,7 +172,7 @@ class Converter {
         }
       }
     }
-    this.observations = this.observations.filter(obs => obs.meta.Type != 'multi')
+    this.observations = this.observations.filter(obs => obs.meta.Type !== 'multi')
   }
 
   applyTypes () {
@@ -427,16 +430,21 @@ class Converter {
     }
     */
 
-    for (const signal of d.keys()) {
-      await this.outirr(signal, d)
+    if (this.onlySignal) {
+      await this.outirr(this.onlySignal, d)
+    } else {
+      for (const signal of d.keys()) {
+        await this.outirr(signal, d)
+      }
     }
+    
   }
   async outirr (signal, d) {
     const m = d.get(signal)
     const rows = []
     const series = {}
     const cmd = []
-    console.log('signal %o', signal)
+    debug('signal %o', signal)
 
     const nice = user => 'user' + user.slice(-2)
     

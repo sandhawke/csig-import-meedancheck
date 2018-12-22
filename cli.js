@@ -58,7 +58,7 @@ yargs
   .alias('e', 'encodingDependsOn')
   .alias('d', 'direct')
   // .choices('p', ['tf', 'ag', 'nc'])   doesn't allow multples, so nope.
-  .strict()
+  // .strict()
   .argv
 
 const argv = yargs.argv
