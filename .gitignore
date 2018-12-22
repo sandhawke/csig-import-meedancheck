@@ -4,3 +4,5 @@ OLD
 node_modules
 out*
 qmeta.csv
+Rplots.pdf
+.~lock*

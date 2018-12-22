@@ -6,6 +6,7 @@ const {fetchCSV} = require('./remote')
 const is = require('@sindresorhus/is');
 const {applyType, answerProperty} = require('./types')
 const setdefault = require('setdefault')
+const pad = require('pad')
 const debug = require('debug')('meedancheck')
 
 /*
@@ -58,7 +59,7 @@ class Converter {
       }
     }
 
-    this.crossref()
+    await this.crossref()
     // this.irrAll()
   }
 
@@ -405,13 +406,14 @@ class Converter {
   }
   */
 
-  crossref () {
+  async crossref () {
     const d = new Map()
     for (const obs of this.observations) {
       setdefault.map(setdefault.map(d, obs.question), obs.media_url)
         .set(obs.user, obs.answer)
     }
-    
+
+    /*
     console.log('d=%O', d)
     console.log('signals=%O', d.keys())
     for (const [signal, persignal] of d.entries()) {
@@ -423,6 +425,81 @@ class Converter {
         }
       }
     }
+    */
+
+    for (const signal of d.keys()) {
+      await this.outirr(signal, d)
+    }
+  }
+  async outirr (signal, d) {
+    const m = d.get(signal)
+    const rows = []
+    const series = {}
+    const cmd = []
+    console.log('signal %o', signal)
+
+    const nice = user => 'user' + user.slice(-2)
+    
+    // who has any ratings for this signal?
+    let raters = new Set()
+    const nums = []
+    let n = 1
+    for (const [subject, persubject] of m.entries()) {
+      nums.push(n)
+      debug('  %d subject %o', n++, subject)
+      debug('     user->reading = %o', persubject)
+      const r = {}
+      for (const [user, reading] of persubject.entries()) {
+        raters.add(user)
+      }
+    }
+    debug('raters = %o', raters)
+    raters = [...raters.keys()].sort()
+    debug('raters = %o', raters)
+
+    // what are their ratings for each subject
+    n = 1
+    for (const [subject, persubject] of m.entries()) {
+      debug('  %d subject %o', n++, subject)
+      debug('     user->reading = %o', persubject)
+      // Make add to the series[rater] vector in lockstep
+      for (const user of raters) {
+        let reading = persubject.get(user)
+        if (reading === undefined) reading = 'NA' // R speak for null
+        debug('     series[%s].push(%o)', nice(user), reading)
+        setdefault.array(series, user).push(reading)
+      }
+
+      // Alternatively, make a row with these entries
+      const r = {}
+      for (const [user, reading] of persubject.entries()) {
+        r[user] = reading
+      }
+      debug('     as row: %o', r)
+      rows.push(r)
+    }
+
+    const sig = signal.replace(/[^a-zA-Z0-9]+/g, '-')
+
+    cmd.push('#           ' + nums.map(x => pad(2,x)).join(','))
+    for (const user of raters) {
+      const numbers = series[user]
+      cmd.push(`${nice(user)} <- c(${numbers.map(x => pad(2,x)).join(',')});`)
+    }
+    cmd.push(`all <- cbind(${raters.map(nice).join(',')})`)
+    cmd.push(`library("Hmisc")`)
+    cmd.push(`library("GGally")`)
+    cmd.push(`rcorr(all)`)
+    cmd.push(`ggcorr(all,label=TRUE)`)
+    cmd.push(`ggsave("out-${sig}.png")`)
+    
+    const opts = {
+      header: true,
+      columns: raters.map(key => ({key, header: nice(key)}))
+    }
+    await fs.promises.writeFile(`out-for-irr-${sig}.csv`, csvStringify(rows, opts), 'utf8')
+    await fs.promises.writeFile(`out-${sig}.R`, cmd.join('\n'))
+    
   }
 }
 
