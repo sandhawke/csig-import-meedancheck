@@ -2,17 +2,28 @@
   Just pull out the data about one question from Zhang18 dataset,
   currently hard coded as #19, to double-check something
 
-$ node extract-one-signal.js > out.csv
-$ diff out.csv out-for-irr-Number-of-links-to-sponsored-content.csv
+$ node extract-one-signal.js
+$ diff out-one-signal-1.csv out-for-irr-Number-of-links-to-sponsored-content.csv
 1c1
 < Check-2018-01,Check-2018-02,Check-2018-03,Check-2018-04,Check-2018-05,Check-2018-06
 ---
 > user01,user02,user03,user04,user05,user06
-$ 
+$ tr -d '"' < out-one-signal-2.csv > out-one-signal-2b.csv
+$ diff out-one-signal-1.csv out-one-signal-2b.csv 
+51c51
+< ,0,,0,,0
+---
+> ,0,,0,,0
+\ No newline at end of file
+
  
 */
-const parse = require('csv-parse/lib/sync')
-const stringify = require('csv-stringify/lib/sync')
+// let's switch parsers just in case it makes a difference...
+// const parse = require('csv-parse/lib/sync')
+const csv = require('csvtojson')
+// and use TWO stringifiers
+const stringify1 = require('csv-stringify/lib/sync')
+const stringify2 = require('json2csv').parse
 const fs = require('fs-extra')
 
 const filenames = [
@@ -32,8 +43,11 @@ const raters = [
 async function main() {
   const records = []
   for (const filename of filenames) {
+    /*
     const text = await fs.readFile(filename)
     const r = parse(text, { columns: true })
+    */
+    const r = await csv().fromFile(filename)
     records.push(...r)
   }
 
@@ -59,9 +73,11 @@ async function main() {
   const samples = Object.values(outputByURL)
   const opts = {
     header: true,
-    columns: raters
+    columns: raters,   // for stringify1
+    fields: raters     // for stringify2
   }
-  process.stdout.write(stringify(samples, opts))
+  await fs.writeFile('out-one-signal-1.csv', stringify1(samples, opts))
+  await fs.writeFile('out-one-signal-2.csv', stringify2(samples, opts))
 }
 
 main()
