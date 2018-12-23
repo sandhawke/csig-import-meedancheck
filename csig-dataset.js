@@ -2,13 +2,15 @@
 //
 // and maybe split out the stats part
 
+const fs = require('fs-extra')
 const kgx = require('kgx')
 const is = require('@sindresorhus/is');
 const setdefault = require('setdefault')
 const pad = require('pad')
 const csvStringify = require('csv-stringify/lib/sync')
 const execa = require('execa')
-
+const lineJSONParser = require('ldjson-stream')
+const { spawn } = require('child_process')
 const debug = require('debug')(__filename.split('/').slice(-1).join())
 
 class Dataset {
@@ -169,47 +171,90 @@ library('irr')
 library('rjson')
 d <- ${this.matrixR(raterColumns)}
 k <- kripp.alpha(d, ${JSON.stringify(type)})
-cat(toJSON(k))`
+cat(toJSON(k)); cat('\n')
+`
   }
-  
-  XXirrR (signal, filename = 'out-from-R.png') {
-    const { raters, nums, raterColumns } = this.irrTable(signal)
-    const cmd = []
-    const NAify = (x => x === undefined ? 'NA' : x)
-    cmd.push('# signal = ' + signal)
-    cmd.push('#           ' + nums.map(NAify).map(x => pad(2,x)).join(','))
-    for (const user of raters) {
-      const numbers = raterColumns[user].map(NAify)
-      cmd.push(`${this.niceName(user)} <- c(${numbers.map(x => pad(2,x)).join(',')});`)
+
+  corrR (matrix, imageFileName) {
+    let s = `# corr
+library('Hmisc')
+library('GGally')
+library('rjson')
+d <- ${this.matrixR(matrix)}
+res <- rcorr(d)
+cat(toJSON(res)); cat('\n')
+`
+    if (imageFileName) {
+      s += `ggcorr(d,label=TRUE); ggsave(${JSON.stringify(imageFileName)})\n`
     }
-    cmd.push(`all <- cbind(${raters.map(x => this.niceName(x)).join(',')})`)
-    cmd.push(`library("Hmisc")`)
-    cmd.push(`library("GGally")`)
-    cmd.push(`rcorr(all)`)
-    cmd.push(`ggcorr(all,label=TRUE)`)
-    cmd.push(`ggsave("${filename}")`)
-    cmd.push(`library("irr")`)
-    cmd.push(`k <- kripp.alpha(t(all), "interval")`)   // ** variable type needed **
-    cmd.push(`library('rjson')`)
-    cmd.push(`print(toJSON(k))`)
-    return cmd.join('\n')
+    return s
   }
+
 
   /**
      I looked at 
-  https://www.npmjs.com/package/rstats
-  https://www.npmjs.com/package/js-call-r
-  https://www.npmjs.com/package/r-script
+     https://www.npmjs.com/package/rstats
+     https://www.npmjs.com/package/js-call-r
+     https://www.npmjs.com/package/r-script
+     and they all ... have problems.
+
+     If we're going to be running many things, it would be good
+     to make this streaming, using some kind of 
    */
-  async runR (text) {
+  async runR1 (text) {
     debug('running R', text)
-    debug('type', typeof text)
+    await fs.writeFile('out-script.R', text) // just for debugging
     const stdout = await execa.stdout('Rscript', ['--vanilla',
-                                             '--slave',
-                                             '-'
-                                      ], {input:text});
+                                                  '--slave',
+                                                  '-'
+                                                 ], {input:text});
     debug('R output', stdout)
     return JSON.parse(stdout)
+  }
+
+  /* async */
+  runR (text) {
+    return new Promise(resolve => {
+      debug('long running R', text)
+
+      if (this.waiting) {
+        throw new Error('longRunR called before previous one had resolved')
+      }
+      this.waiting = resolve
+
+      fs.writeFileSync('out-script.R', text) // just for debugging
+
+      if (!this.child) {
+        console.error('Spawning Rscript sub-process; it may produce some messages')
+        debug('spawning new R')
+        this.child = spawn('Rscript', ['--vanilla', '--slave', '--silent', '-'])
+        // we could send these to a file, or ... something.
+        this.child.stderr.pipe(process.stderr)
+        this.child.stdout.pipe(lineJSONParser.parse())
+          .on('data', obj => {
+            debug('got from R: %o', obj)
+            const w = this.waiting
+            this.waiting = null
+            if (w) {
+              w(obj)
+            } else {
+              console.error('extra output from R: ' + JSON.stringify(obj))
+            }
+          })
+      }
+
+      this.child.stdin.write(text)
+      debug('sent to R: %o', text)
+    })
+  }
+
+  stop () {
+    if (this.child) {
+      this.child.stdin.write('quit()\n')
+      debug('telling R to quit')
+      this.child.stdin.end()
+      this.child = null
+    }
   }
 }  
 

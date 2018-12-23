@@ -16,7 +16,31 @@ test(t => {
   } catch (e) {
     t.equal(e.message, 'uneven row length')
   }
-          
+
+  t.end()
+})
+
+test.only(async (t) => {
+  const d = new Dataset()
+  let m, x
+
+  m = [[10,11],[11,10],[10,11],[11,10],[11,10]]
+  x = await d.runR(d.corrR(m))
+  t.deepEqual(x, { r: [ 1, -1, -1, 1 ], n: [ 5, 5, 5, 5 ], P: [ 'NA', 0, 0, 'NA' ] })
+
+  m = [[1,0],[1,0],[1,0],[1,0],[1,0]]
+  x = await d.runR(d.corrR(m))
+  t.deepEqual(x, { r: [ 1, 'NaN', 'NaN', 1 ], n: [ 5, 5, 5, 5 ], P: [ 'NA', 'NaN', 'NaN', 'NA' ] })
+
+  m = [[1,1],[1,1],[1,1],[2,1],[1,0],[0,0],[0,1],[1,1]]
+  x = await d.runR(d.corrR(m))
+  t.deepEqual(x, {
+    r: [ 1, 0.361157559257308, 0.361157559257308, 1 ],
+    n: [ 8, 8, 8, 8 ],
+    P: [ 'NA', 0.379409789480354, 0.379409789480354, 'NA' ]
+  })
+
+  d.stop()
   t.end()
 })
 

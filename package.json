@@ -43,6 +43,7 @@
     "js-call-r": "0.0.4",
     "json2csv": "^4.3.2",
     "kgx": "0.0.5",
+    "ldjson-stream": "^1.2.1",
     "moment": "^2.22.2",
     "pad": "^2.2.1",
     "setdefault": "^1.0.2",
