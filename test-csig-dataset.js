@@ -1,48 +1,8 @@
 const test = require('tape')
-const {Dataset} = require('./csig-dataset')
-const {Converter} = require('.')
-const debug = require('debug')(__filename.split('/').slice(-1).join())
-
-test(t => {
-  const d = new Dataset()
-  t.equal(d.matrixR([[1,2],[3,4]]),'matrix(c(1,2,3,4),byrow=TRUE,ncol=2)')
-  t.equal(d.matrixR([[1,2],[3,4]],true),'matrix(c(1,2,3,4),byrow=FALSE,nrow=2)')
-  t.equal(d.matrixR([{a:1,b:2},[3,4]]),'matrix(c(1,2,3,4),byrow=TRUE,ncol=2)')
-  t.equal(d.matrixR({a:[1,2],b:[3,4]},true),'matrix(c(1,2,3,4),byrow=FALSE,nrow=2)')
-
-  try {
-    t.equal(d.matrixR([[1,2,3],[3,4]]),'')
-    t.fail()
-  } catch (e) {
-    t.equal(e.message, 'uneven row length')
-  }
-
-  t.end()
-})
-
-test.only(async (t) => {
-  const d = new Dataset()
-  let m, x
-
-  m = [[10,11],[11,10],[10,11],[11,10],[11,10]]
-  x = await d.runR(d.corrR(m))
-  t.deepEqual(x, { r: [ 1, -1, -1, 1 ], n: [ 5, 5, 5, 5 ], P: [ 'NA', 0, 0, 'NA' ] })
-
-  m = [[1,0],[1,0],[1,0],[1,0],[1,0]]
-  x = await d.runR(d.corrR(m))
-  t.deepEqual(x, { r: [ 1, 'NaN', 'NaN', 1 ], n: [ 5, 5, 5, 5 ], P: [ 'NA', 'NaN', 'NaN', 'NA' ] })
-
-  m = [[1,1],[1,1],[1,1],[2,1],[1,0],[0,0],[0,1],[1,1]]
-  x = await d.runR(d.corrR(m))
-  t.deepEqual(x, {
-    r: [ 1, 0.361157559257308, 0.361157559257308, 1 ],
-    n: [ 8, 8, 8, 8 ],
-    P: [ 'NA', 0.379409789480354, 0.379409789480354, 'NA' ]
-  })
-
-  d.stop()
-  t.end()
-})
+const { Dataset } = require('./csig-dataset')
+const { Converter } = require('.')
+const { RDriver } = require('r-driver')
+// const debug = require('debug')(__filename.split('/').slice(-1).join())
 
 test(async (t) => {
   const conv = new Converter({
@@ -58,28 +18,23 @@ test(async (t) => {
   })
   try {
     await conv.convert()
-  } catch(e) {
+  } catch (e) {
     console.log('convert() threw:', e)
   }
   t.equal(conv.observations.length, 2964)
 
   t.comment('checking RDF solve')
-  
+
   const pat = `
 ?obs 
    x:by ?user;
    dc:date ?date.
 ?obs { ?subject ?signal ?reading }
 `
-  let count = 0
-  for (const b of conv.kb.solve(pat)) {
-    count++
-  }
-  t.equal(count, 2964)
-
+  t.equal([...conv.kb.solve(pat)].length, 2964)
 
   t.comment('starting ds creation')
-  const ds = new Dataset({kb:conv.kb})
+  const ds = new Dataset({ kb: conv.kb })
   t.comment('... done')
   // console.log('ds.sm=%o', ds.signalMap)
 
@@ -104,12 +59,13 @@ test(async (t) => {
 
   // console.log(ds.irrCSV('Number of links to sponsored content'))
 
-  const x = await ds.runR(ds.irrR('Number of links to sponsored content'))
+  const rdr = new RDriver()
+  const x = await rdr.krippAlpha(ds.irrTable('Number of links to sponsored content').raterColumns)
+  rdr.stop()
   t.equal(x.method, 'Krippendorff\'s alpha')
   t.equal(x.subjects, 50)
   t.equal(x.raters, 6)
   t.equal(x.value, 0.103582697558086)
-  
+
   t.end()
 })
-
