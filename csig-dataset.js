@@ -7,12 +7,14 @@ const is = require('@sindresorhus/is');
 const setdefault = require('setdefault')
 const pad = require('pad')
 const csvStringify = require('csv-stringify/lib/sync')
+const execa = require('execa')
+
 const debug = require('debug')(__filename.split('/').slice(-1).join())
 
 class Dataset {
-  constructor (opts) {
+  constructor (opts = {}) {
     this.kb = opts.kb // just this for now
-    this.generateSignalMap()
+    if (this.kb) this.generateSignalMap()
   }
 
   /*
@@ -132,7 +134,45 @@ class Dataset {
     return csvStringify(tables.raterRows, opts)
   }
 
-  irrR (signal, filename = 'out-from-R.png') {
+  /**
+   * Given x[rowIndex][columnIndex], output the R syntax to generate
+   * that matrix.  Or x[columnIndex][rowIndex] if you add the
+   * transpose flag.
+   *
+   * Objects or arrays are fine.  Order will be JS's Objects.values
+   * order, such as it is.  If you care, then pass arrays.
+   */
+  matrixR (x, transpose) {
+    let values= []
+    let cols = null
+    for (const row of Object.values(x)) {
+      const rowArray = [...Object.values(row)]
+      if (cols === null) {
+        cols = rowArray.length
+      } else {
+        if (cols !== rowArray.length) throw Error('uneven row length')
+      }
+      values.push(...rowArray)
+    }
+    values = values.map(x => x === undefined ? 'NA' : x)
+    if (!transpose) {
+      return `matrix(c(${values.join(',')}),byrow=TRUE,ncol=${cols})`
+    } else {
+      return `matrix(c(${values.join(',')}),byrow=FALSE,nrow=${cols})`
+    }
+  }
+
+  irrR (signal, type = 'interval') {
+    const { raterColumns } = this.irrTable(signal)
+    return `# signal = ${signal}
+library('irr')
+library('rjson')
+d <- ${this.matrixR(raterColumns)}
+k <- kripp.alpha(d, ${JSON.stringify(type)})
+cat(toJSON(k))`
+  }
+  
+  XXirrR (signal, filename = 'out-from-R.png') {
     const { raters, nums, raterColumns } = this.irrTable(signal)
     const cmd = []
     const NAify = (x => x === undefined ? 'NA' : x)
@@ -149,8 +189,27 @@ class Dataset {
     cmd.push(`ggcorr(all,label=TRUE)`)
     cmd.push(`ggsave("${filename}")`)
     cmd.push(`library("irr")`)
-    cmd.push(`kripp.alpha(t(all), "interval")`)   // ** variable type needed **
+    cmd.push(`k <- kripp.alpha(t(all), "interval")`)   // ** variable type needed **
+    cmd.push(`library('rjson')`)
+    cmd.push(`print(toJSON(k))`)
     return cmd.join('\n')
+  }
+
+  /**
+     I looked at 
+  https://www.npmjs.com/package/rstats
+  https://www.npmjs.com/package/js-call-r
+  https://www.npmjs.com/package/r-script
+   */
+  async runR (text) {
+    debug('running R', text)
+    debug('type', typeof text)
+    const stdout = await execa.stdout('Rscript', ['--vanilla',
+                                             '--slave',
+                                             '-'
+                                      ], {input:text});
+    debug('R output', stdout)
+    return JSON.parse(stdout)
   }
 }  
 
