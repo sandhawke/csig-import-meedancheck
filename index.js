@@ -7,7 +7,7 @@ const is = require('@sindresorhus/is');
 const {applyType, answerProperty} = require('./types')
 const setdefault = require('setdefault')
 const pad = require('pad')
-const debug = require('debug')('meedancheck')
+const debug = require('debug')('csig-import-meedancheck')
 
 /*
   attributes of a Converter are basically the yargs, hopefully
@@ -24,13 +24,15 @@ class Converter {
 
   async convert () {
     for (const filename of this.sources) await this.load(filename)
-    
+
     await this.loadQMeta()
     this.toObservations()
+    await this.loadAMeta()
     this.splitMulti()
     this.applyTypes()
     
     if (this.jsonDump) {
+      if (!this.jsonDumpPrefix) this.jsonDumpPrefix = 'out-'
       await fs.promises.writeFile(this.jsonDumpPrefix + 'records.json',
                                   JSON.stringify(this.records, null, 2))
       await fs.promises.writeFile(this.jsonDumpPrefix + 'observations.json',
@@ -70,6 +72,36 @@ class Converter {
           nrecs.length, filename, this.records.length)
   }
 
+  async loadAMeta () {
+    if (this.ametaFile) {
+
+      const question = 'Accuracy (1-5) according to domain expert'
+      let meta = this.meta[question]
+      if (!meta) {
+        meta = {
+          createdIn_loadAMeta: true,
+          Type: 'decimal'
+        }
+        this.meta[question] = meta
+      }
+      
+      this.ameta = []
+      for (const rec of await read.readCSV(this.ametaFile)) {
+        rec.score = rec['Expert score (1-5)']
+        rec.url = cleanURL(rec['Link'])
+        this.ameta[rec.Link] = rec
+        const user = rec['Domain Expert'] || 'Unknown Expert'
+        const date = new Date('2018-01-01')
+        const answer = rec.score
+        const note = rec['Expert Notes']
+        const obs = { user, question, answer, date, note, meta }
+        obs.media_url = rec.url
+        debug('ameta = %o', obs)
+        this.observations.push(obs)
+      }
+    }
+  }
+  
   async loadQMeta () {
     this.meta = {}
     if (this.qmeta) {
@@ -120,6 +152,7 @@ class Converter {
         for (const p of copyProperties) {
           obs[p] = r[p]
         }
+        obs.media_url = cleanURL(obs.media_url)
         this.observations.push(obs)
         // if (obs.meta.Type === 'multi') debug('added obs %O', obs)
       }
@@ -630,4 +663,18 @@ function convert (records) {
   }
 }
 
+// no pretty.  maybe we should do this in comparison so we're not
+// messing up the data?
+function cleanURL (u) {
+  u = u.replace(/^http:/, 'https:')
+  u = u.replace(/\/\/www\./, '//')
+  u = u.replace(/\/$/, '')
+  // hacks!  for bad zhang18 expert data
+  u = u.replace('?ocid=fbert', '')
+  u = u.replace('/about/family', '')
+  u = u.replace('/family', '')
+  return u
+}
+
 module.exports = { convert, Converter }
+

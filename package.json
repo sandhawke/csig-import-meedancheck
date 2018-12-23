@@ -28,6 +28,7 @@
   },
   "homepage": "https://github.com/sandhawke/csig-import-meedancheck#readme",
   "devDependencies": {
+    "stringify-json": "^2.0.0",
     "tape": "^4.9.1"
   },
   "dependencies": {
@@ -42,7 +43,6 @@
     "got": "^9.4.0",
     "js-call-r": "0.0.4",
     "json2csv": "^4.3.2",
-    "kgx": "0.0.5",
     "ldjson-stream": "^1.2.1",
     "moment": "^2.22.2",
     "pad": "^2.2.1",

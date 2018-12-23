@@ -7,6 +7,7 @@ const debug = require('debug')(__filename.split('/').slice(-1).join())
 class Dataset {
   constructor (opts = {}) {
     this.kb = opts.kb // just this for now
+    this.subjects = new Set()
     if (this.kb) this.generateSignalMap()
   }
 
@@ -18,8 +19,10 @@ class Dataset {
 ?obs x:by ?user.`
     for (const b of this.kb.solve(pat)) {
       // essentially: d[signal][subject][user] = rating
+      this.subjects.add(b.subject.value)
+      const val = b.reading.value // answerIndex?
       setdefault.map(setdefault.map(d, b.signal.value.slice(x)), b.subject.value)
-        .set(b.user.value, b.reading.value)
+        .set(b.user.value, val)
     }
     this.signalMap = d
     return d
@@ -84,8 +87,42 @@ class Dataset {
     }
     return csvStringify(tables.raterRows, opts)
   }
+
+  corrTable (questions) {
+    const rows = []
+    for (const subject of this.subjects) {
+      debug('\n%o', {subject})
+      const row = []
+      for (const question of questions) {
+        const signal = question
+        const raterMap = this.signalMap.get(signal).get(subject)
+        if (raterMap) {
+          const values = [...raterMap.values()]
+          if (values.length) {
+            const val = mean(values)
+            row.push(val)
+            debug('.. yes %o', {signal, values, val, mean: mean(values)})
+          }
+        } else {
+          debug('.. NO %o', signal)
+          if (signal === 'Accuracy (1-5) according to domain expert') {
+            console.error('WARNING: No expert answer for %o', subject)
+          }
+          row.push('NA')  // Ummm, this doesn't seem ideal.
+        }
+      }
+      debug('subject=%o row=%o', subject, row)
+      rows.push(row)
+    }
+    return rows
+  }
 }
 
 const dataset = (...args) => new Dataset(...args)
 
-module.exports = { Dataset, dataset }
+module.exports = { Dataset, dataset, mean }
+
+function mean (arr) {
+  const sum = arr.reduce((acc, curr) => acc + parseFloat(curr), 0)
+  return sum / arr.length
+}
